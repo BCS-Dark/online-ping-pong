@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Пинг-понг онлайн</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="join-screen">
+    <h1>Пинг-понг для двоих</h1>
+    <input type="text" id="room-input" placeholder="Введите имя комнаты" />
+    <button id="join-btn">Присоединиться</button>
+    <p id="status"></p>
+  </div>
+
+  <canvas id="game" width="800" height="400"></canvas>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const joinScreen = document.getElementById('join-screen');
+    const roomInput = document.getElementById('room-input');
+    const joinBtn = document.getElementById('join-btn');
+    const status = document.getElementById('status');
+
+    let socket = null;
+    let playerNum = null;
+    let gameStarted = false;
+
+    // Игровые объекты
+    const paddleHeight = 80;
+    const paddleWidth = 10;
+    let leftPaddleY = canvas.height / 2 - paddleHeight / 2;
+    let rightPaddleY = canvas.height / 2 - paddleHeight / 2;
+    let ball = { x: canvas.width / 2, y: canvas.height / 2, dx: 5, dy: 3, radius: 8 };
+
+    // Управление
+    const keys = { ArrowUp: false, ArrowDown: false, w: false, s: false };
+
+    window.addEventListener('keydown', e => {
+      if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+    });
+    window.addEventListener('keyup', e => {
+      if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+    });
+
+    function connectToRoom(room) {
+      socket = new WebSocket(`ws://${window.location.host}/`);
+      
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: 'join', room }));
+      };
+
+      socket.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        
+        if (msg.type === 'player') {
+          playerNum = msg.num;
+          status.textContent = `Вы — Игрок ${playerNum}`;
+        }
+        
+        if (msg.type === 'start') {
+          gameStarted = true;
+          joinScreen.style.display = 'none';
+          requestAnimationFrame(gameLoop);
+        }
+        
+        if (msg.type === 'paddle') {
+          if (msg.player === 1) leftPaddleY = msg.y;
+          else rightPaddleY = msg.y;
+        }
+        
+        if (msg.type === 'ball') {
+          ball.x = msg.x;
+          ball.y = msg.y;
+          ball.dx = msg.dx;
+          ball.dy = msg.dy;
+        }
+        
+        if (msg.type === 'opponent-left') {
+          alert('Оппонент покинул игру!');
+          location.reload();
+        }
+      };
+    }
+
+    joinBtn.onclick = () => {
+      const room = roomInput.value.trim();
+      if (room) connectToRoom(room);
+      else alert('Введите имя комнаты!');
+    };
+
+    function updatePaddles() {
+      if (playerNum === 1) {
+        if (keys.w && leftPaddleY > 0) leftPaddleY -= 8;
+        if (keys.s && leftPaddleY < canvas.height - paddleHeight) leftPaddleY += 8;
+        if (socket) socket.send(JSON.stringify({ type: 'paddle', y: leftPaddleY }));
+      } else if (playerNum === 2) {
+        if (keys.ArrowUp && rightPaddleY > 0) rightPaddleY -= 8;
+        if (keys.ArrowDown && rightPaddleY < canvas.height - paddleHeight) rightPaddleY += 8;
+        if (socket) socket.send(JSON.stringify({ type: 'paddle', y: rightPaddleY }));
+      }
+    }
+
+    function updateBall() {
+      if (playerNum === 1) {
+        ball.x += ball.dx;
+        ball.y += ball.dy;
+
+        // Отскок от верха/низа
+        if (ball.y <= 0 || ball.y >= canvas.height) ball.dy *= -1;
+
+        // Отскок от ракеток
+        if (
+          ball.dx < 0 &&
+          ball.x - ball.radius <= paddleWidth &&
+          ball.y >= leftPaddleY &&
+          ball.y <= leftPaddleY + paddleHeight
+        ) {
+          ball.dx *= -1;
+        }
+        if (
+          ball.dx > 0 &&
+          ball.x + ball.radius >= canvas.width - paddleWidth &&
+          ball.y >= rightPaddleY &&
+          ball.y <= rightPaddleY + paddleHeight
+        ) {
+          ball.dx *= -1;
+        }
+
+        // Отправка позиции мяча (только от одного игрока!)
+        if (socket) socket.send(JSON.stringify({
+          type: 'ball',
+          x: ball.x,
+          y: ball.y,
+          dx: ball.dx,
+          dy: ball.dy
+        }));
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Ракетки
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, leftPaddleY, paddleWidth, paddleHeight);
+      ctx.fillRect(canvas.width - paddleWidth, rightPaddleY, paddleWidth, paddleHeight);
+      
+      // Мяч
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Сетка
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.strokeStyle = '#fff';
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function gameLoop() {
+      if (!gameStarted) return;
+      
+      updatePaddles();
+      if (playerNum === 1) updateBall(); // Только один игрок обновляет мяч
+      draw();
+      
+      requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>

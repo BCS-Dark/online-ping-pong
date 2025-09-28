@@ -1,0 +1,35 @@
+body {
+  margin: 0;
+  padding: 20px;
+  background: #111;
+  color: white;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#join-screen {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+#room-input {
+  padding: 8px;
+  font-size: 16px;
+  margin: 10px;
+}
+
+#join-btn {
+  padding: 10px 20px;
+  font-size: 16px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+#game {
+  border: 2px solid #444;
+  background: #000;
+}
